@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MOCK_EMPLOYEES, INITIAL_REQUESTS, MOCK_DEPARTMENTS, DEFAULT_COMPANY_INFO, DEFAULT_HOLIDAYS, APP_VERSION } from './constants';
-import { Employee, LeaveRequest, LeaveStatus, Role, PublicHoliday } from './types';
+import { Employee, LeaveRequest, LeaveStatus, Role, PublicHoliday, ManualTimeEntry, LeaveType } from './types';
 import { LeaveForm } from './components/LeaveForm';
 import { MonthlyReport } from './components/MonthlyReport';
 import { AdminPanel } from './components/AdminPanel';
@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<Employee>(MOCK_EMPLOYEES[0]);
   const [requests, setRequests] = useState<LeaveRequest[]>(INITIAL_REQUESTS);
   const [holidays, setHolidays] = useState<PublicHoliday[]>(DEFAULT_HOLIDAYS);
+  const [manualEntries, setManualEntries] = useState<ManualTimeEntry[]>([]);
   
   const [view, setView] = useState<'dashboard' | 'report' | 'admin'>('dashboard');
   const [showForm, setShowForm] = useState(false);
@@ -49,6 +50,9 @@ const App: React.FC = () => {
 
     const savedHolidays = localStorage.getItem('holidays');
     if (savedHolidays) setHolidays(JSON.parse(savedHolidays));
+
+    const savedManual = localStorage.getItem('manual_entries');
+    if (savedManual) setManualEntries(JSON.parse(savedManual));
 
     const savedCompany = localStorage.getItem('company_info');
     if (savedCompany) {
@@ -73,6 +77,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('holidays', JSON.stringify(holidays));
   }, [holidays]);
+
+  useEffect(() => {
+    localStorage.setItem('manual_entries', JSON.stringify(manualEntries));
+  }, [manualEntries]);
 
   useEffect(() => {
       localStorage.setItem('company_info', JSON.stringify({ name: companyName, logo: companyLogo }));
@@ -158,12 +166,73 @@ const App: React.FC = () => {
       setHolidays(prev => prev.filter(h => h.id !== id));
   };
 
+  // Manual Entry Handler & Sync to Requests
+  const handleUpdateManualEntry = (entry: ManualTimeEntry) => {
+      // 1. Update State for Timesheet
+      setManualEntries(prev => {
+          const existingIdx = prev.findIndex(e => e.id === entry.id);
+          const newArr = [...prev];
+          
+          if (entry.type === 'DELETE') {
+              if (existingIdx > -1) newArr.splice(existingIdx, 1);
+          } else {
+              if (existingIdx > -1) newArr[existingIdx] = entry;
+              else newArr.push(entry);
+          }
+          return newArr;
+      });
+
+      // 2. Sync logic: Create or Delete Request based on Timesheet Entry
+      // Các mã chấm công được coi là nghỉ: P (Phép), O (Ốm), KL (Không lương)
+      const isLeaveCode = ['P', 'KL', 'O'].includes(entry.type);
+      const isWorkOrClearCode = ['H', 'H/2', 'L', 'DELETE'].includes(entry.type);
+
+      if (isLeaveCode) {
+          // Xác định loại nghỉ tương ứng
+          let mappedType = LeaveType.VACATION; 
+          if (entry.type === 'KL') mappedType = LeaveType.UNPAID;
+          if (entry.type === 'O') mappedType = LeaveType.SICK;
+
+          // Kiểm tra xem đã có đơn nghỉ cho ngày này chưa
+          const exists = requests.some(r => 
+              r.employeeId === entry.employeeId && 
+              r.startDate <= entry.date && 
+              r.endDate >= entry.date
+          );
+
+          if (!exists) {
+              const autoRequest: LeaveRequest = {
+                  id: `auto_${entry.employeeId}_${entry.date}`, 
+                  employeeId: entry.employeeId,
+                  startDate: entry.date,
+                  endDate: entry.date,
+                  type: mappedType,
+                  reason: 'Cập nhật thủ công từ Bảng chấm công',
+                  status: LeaveStatus.APPROVED,
+                  daysCount: 1, 
+                  createdAt: new Date().toISOString(),
+                  approvedBy: currentUser.name 
+              };
+              setRequests(prev => [autoRequest, ...prev]);
+          }
+      } else if (isWorkOrClearCode) {
+          // Xóa đơn tự động nếu có
+          setRequests(prev => prev.filter(r => {
+              const isAutoCreated = r.id.startsWith(`auto_${entry.employeeId}_${entry.date}`);
+              const isMatchingDate = r.startDate === entry.date && r.endDate === entry.date;
+              if (isAutoCreated && isMatchingDate) return false;
+              return true;
+          }));
+      }
+  };
+
   const handleResetData = () => {
     localStorage.clear();
     setEmployees(MOCK_EMPLOYEES);
     setDepartments(MOCK_DEPARTMENTS);
     setRequests(INITIAL_REQUESTS);
     setHolidays(DEFAULT_HOLIDAYS);
+    setManualEntries([]);
     setCompanyName(DEFAULT_COMPANY_INFO.name);
     setCompanyLogo(DEFAULT_COMPANY_INFO.logo);
     setCurrentUser(MOCK_EMPLOYEES[0]);
@@ -176,6 +245,7 @@ const App: React.FC = () => {
           if (data.departments) setDepartments(data.departments);
           if (data.requests) setRequests(data.requests);
           if (data.holidays) setHolidays(data.holidays);
+          if (data.manualEntries) setManualEntries(data.manualEntries);
           if (data.companyInfo) {
               setCompanyName(data.companyInfo.name);
               setCompanyLogo(data.companyInfo.logo);
@@ -269,7 +339,7 @@ const App: React.FC = () => {
                 )}
                 <span className="truncate" title={companyName}>{companyName}</span>
             </h1>
-            <p className="text-xs text-gray-500 mt-2">Hệ thống quản lý nghỉ phép</p>
+            <p className="text-xs text-gray-500 mt-2">Hệ thống quản lý nhân sự</p>
             </div>
 
             <nav className="flex-1 p-4 space-y-2">
@@ -413,6 +483,7 @@ const App: React.FC = () => {
                   if (!requester) return null;
                   
                   const hasPerm = hasPermissionOnRequest(req, requester);
+                  const isAutoGenerated = req.id.startsWith('auto_');
 
                   return (
                     <div key={req.id} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row gap-6 animate-in fade-in slide-in-from-bottom-2">
@@ -441,7 +512,7 @@ const App: React.FC = () => {
                             • Tạo ngày {new Date(req.createdAt).toLocaleDateString('vi-VN')}
                           </span>
                         </div>
-                        <p className="text-gray-600 text-sm leading-relaxed bg-gray-50 p-3 rounded-lg italic border-l-4 border-blue-200">
+                        <p className={`text-gray-600 text-sm leading-relaxed bg-gray-50 p-3 rounded-lg italic border-l-4 ${isAutoGenerated ? 'border-purple-200 bg-purple-50' : 'border-blue-200'}`}>
                           "{req.reason}"
                         </p>
                       </div>
@@ -498,11 +569,14 @@ const App: React.FC = () => {
 
         {view === 'report' && (
           <MonthlyReport 
+            currentUser={currentUser}
             employees={employees} 
             requests={requests} 
             departments={departments}
             companyName={companyName}
             holidays={holidays}
+            manualEntries={manualEntries}
+            onUpdateEntry={handleUpdateManualEntry}
           />
         )}
 

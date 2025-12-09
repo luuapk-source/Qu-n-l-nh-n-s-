@@ -25,6 +25,9 @@ export interface Employee {
   avatar: string;
   role: Role;        // Dùng để phân quyền (System Role)
   jobTitle?: string; // Dùng để hiển thị chức danh thực tế (Display Title)
+  dob?: string;
+  contractDate?: string;
+  contractType?: string;
 }
 
 export interface LeaveRequest {
@@ -52,4 +55,12 @@ export interface PublicHoliday {
   id: string;
   date: string; // YYYY-MM-DD
   name: string;
+}
+
+export interface ManualTimeEntry {
+  id: string;
+  employeeId: string;
+  date: string;
+  type: string;
+  value?: number;
 }

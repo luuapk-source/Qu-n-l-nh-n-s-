@@ -1,5 +1,5 @@
 {
   "name": "HR-EasyLeave",
-  "description": "Hệ thống quản lý nghỉ phép nhân viên nội bộ, tích hợp AI hỗ trợ soạn thảo đơn từ và báo cáo tổng hợp cuối tháng.",
+  "description": "Hệ thống quản lý nhân sự, chấm công và nghỉ phép nội bộ, tích hợp AI hỗ trợ soạn thảo đơn từ và báo cáo tổng hợp cuối tháng.",
   "requestFramePermissions": []
 }

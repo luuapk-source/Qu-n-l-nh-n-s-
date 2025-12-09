@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Employee, Role, PublicHoliday, LeaveRequest } from '../types';
-import { Upload, Plus, Users, AlertCircle, Download, Trash2, RotateCcw, CopyPlus, Settings, Image as ImageIcon, Loader2, RefreshCw, Edit, X, CalendarCheck, Save, FolderUp } from 'lucide-react';
+import { Upload, Plus, Users, AlertCircle, Download, Trash2, RotateCcw, CopyPlus, Settings, Image as ImageIcon, Loader2, RefreshCw, Edit, X, CalendarCheck, Save, FolderUp, Camera } from 'lucide-react';
 
 const getXLSX = () => (window as any).XLSX;
 
@@ -35,6 +35,23 @@ const toRoman = (num: number): string => {
     return str;
 };
 
+// Logic xếp hạng chức danh để sắp xếp
+const getJobRank = (title: string = '') => {
+    const t = title.toLowerCase().trim();
+    // 1. Cấp Lãnh đạo cao nhất
+    if (t.includes('tổng giám đốc') && !t.includes('phó') && !t.includes('trợ lý')) return 100;
+    if (t.includes('phó tổng giám đốc')) return 90;
+    
+    // 2. Cấp Trưởng đơn vị
+    if ((t.includes('trưởng ban') || t.includes('giám đốc ban') || t.includes('kế toán trưởng')) && !t.includes('phó')) return 80;
+    
+    // 3. Cấp Phó đơn vị
+    if (t.includes('phó ban') || t.includes('phó giám đốc')) return 70;
+    
+    // 4. Các vị trí khác (xếp cuối)
+    return 10;
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   currentUser,
   employees, 
@@ -60,6 +77,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newDept, setNewDept] = useState(departments[0] || '');
   const [newRole, setNewRole] = useState<Role>(Role.STAFF);
   const [newJobTitle, setNewJobTitle] = useState('');
+  const [newDob, setNewDob] = useState('');
+  const [newContractDate, setNewContractDate] = useState('');
+  const [newContractType, setNewContractType] = useState('');
+  const [newAvatar, setNewAvatar] = useState('');
+
   const [isNewDeptMode, setIsNewDeptMode] = useState(false);
   const [customDept, setCustomDept] = useState('');
 
@@ -69,6 +91,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editDept, setEditDept] = useState('');
   const [editJobTitle, setEditJobTitle] = useState('');
   const [editRole, setEditRole] = useState<Role>(Role.STAFF);
+  const [editDob, setEditDob] = useState('');
+  const [editContractDate, setEditContractDate] = useState('');
+  const [editContractType, setEditContractType] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
+
   const [editIsNewDept, setEditIsNewDept] = useState(false);
   const [editCustomDept, setEditCustomDept] = useState('');
 
@@ -83,6 +110,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Settings State
   const [editCompanyName, setEditCompanyName] = useState(companyInfo.name);
+
+  // Helper: Handle Avatar Upload
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>, setAvatarState: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Ảnh quá lớn! Vui lòng chọn ảnh dưới 2MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarState(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,12 +146,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       department: finalDept,
       role: newRole,
       jobTitle: newJobTitle || (newRole === Role.BOD ? 'Lãnh đạo' : newRole === Role.MANAGER ? 'Quản lý' : 'Nhân viên'),
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`
+      avatar: newAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`,
+      dob: newDob,
+      contractDate: newContractDate,
+      contractType: newContractType
     };
 
     onAddEmployee(newEmp);
+    // Reset Form
     setNewName('');
     setNewJobTitle('');
+    setNewDob('');
+    setNewContractDate('');
+    setNewContractType('');
+    setNewAvatar('');
     alert('Đã thêm nhân viên thành công!');
   };
 
@@ -130,6 +181,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditDept(emp.department);
     setEditJobTitle(emp.jobTitle || '');
     setEditRole(emp.role);
+    setEditDob(emp.dob || '');
+    setEditContractDate(emp.contractDate || '');
+    setEditContractType(emp.contractType || '');
+    setEditAvatar(emp.avatar || '');
     setEditIsNewDept(false);
     setEditCustomDept('');
   };
@@ -153,7 +208,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           name: editName,
           department: finalDept,
           jobTitle: editJobTitle,
-          role: editRole
+          role: editRole,
+          dob: editDob,
+          contractDate: editContractDate,
+          contractType: editContractType,
+          avatar: editAvatar
       };
 
       onUpdateEmployee(updatedEmp);
@@ -302,7 +361,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     department: finalDept,
                     role: sysRole,
                     jobTitle: rawRole || (sysRole === Role.BOD ? 'Lãnh đạo' : sysRole === Role.MANAGER ? 'Quản lý' : 'Nhân viên'),
-                    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(rawName)}`
+                    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(rawName)}`,
+                    dob: '',
+                    contractDate: '',
+                    contractType: ''
                 });
             }
         }
@@ -326,23 +388,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       alert("Thư viện Excel chưa tải xong. Vui lòng tải lại trang.");
       return;
     }
-    const header = ["STT", "Phòng/Ban", "Họ và Tên", "Chức danh"];
+    const header = ["STT", "Phòng/Ban", "Họ và Tên", "Ngày sinh", "Chức danh", "Ngày ký HĐ", "Ghi chú HĐ"];
     const dataRows: any[] = [];
     departments.forEach((dept, index) => {
-        const deptEmps = employees.filter(e => e.department === dept);
+        // Sort employees before export
+        const deptEmps = employees
+            .filter(e => e.department === dept)
+            .sort((a, b) => getJobRank(b.jobTitle) - getJobRank(a.jobTitle));
+
         if (deptEmps.length === 0) return;
-        dataRows.push([`${toRoman(index + 1)}. ${dept.toUpperCase()}`, "", "", ""]);
+        dataRows.push([`${toRoman(index + 1)}. ${dept.toUpperCase()}`, "", "", "", "", "", ""]);
         deptEmps.forEach((emp, idx) => {
             dataRows.push([
                 idx + 1,
                 emp.department, 
-                emp.name,       
-                emp.jobTitle || emp.role
+                emp.name,
+                emp.dob || '',
+                emp.jobTitle || emp.role,
+                emp.contractDate || '',
+                emp.contractType || ''
             ]);
         });
     });
     const ws = XLSX.utils.aoa_to_sheet([[`DANH SÁCH NHÂN SỰ - ${companyInfo.name.toUpperCase()}`], [], header, ...dataRows]);
-    ws['!cols'] = [{ wch: 8 }, { wch: 25 }, { wch: 25 }, { wch: 25 }];
+    ws['!cols'] = [{ wch: 8 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 20 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "NhanSu");
     XLSX.writeFile(wb, "DanhSachNhanSu.xlsx");
@@ -463,8 +532,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeTab === 'manual' && (
         <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-6 animate-in fade-in">
            <h3 className="text-sm font-semibold text-blue-800 mb-3">Thêm mới nhân viên</h3>
-           <form onSubmit={handleManualSubmit} className="flex flex-col md:flex-row gap-3 items-end">
-              <div className="flex-1 w-full">
+           <form onSubmit={handleManualSubmit} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+               {/* Avatar Upload for New Employee */}
+               <div className="col-span-1 flex flex-col items-center justify-center">
+                   <div className="w-16 h-16 rounded-full border-2 border-blue-200 bg-white flex items-center justify-center overflow-hidden mb-2 relative group">
+                       {newAvatar ? (
+                           <img src={newAvatar} alt="Preview" className="w-full h-full object-cover" />
+                       ) : (
+                           <ImageIcon className="w-6 h-6 text-gray-400" />
+                       )}
+                       <label className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                           <Camera className="w-6 h-6 text-white" />
+                           <input type="file" accept="image/*" onChange={(e) => handleAvatarChange(e, setNewAvatar)} className="hidden" />
+                       </label>
+                   </div>
+                   <span className="text-[10px] text-gray-500">Ảnh đại diện</span>
+               </div>
+
+              <div className="col-span-1 lg:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Phòng/Ban</label>
                 <div className="flex gap-1">
                   {!isNewDeptMode ? (
@@ -496,7 +581,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex-[1.5] w-full">
+              <div className="col-span-1 lg:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Họ và Tên</label>
                 <input
                   type="text"
@@ -508,7 +593,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 />
               </div>
 
-              <div className="flex-1 w-full">
+              <div className="col-span-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Ngày sinh</label>
+                  <input
+                    type="text"
+                    value={newDob}
+                    onChange={e => setNewDob(e.target.value)}
+                    className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="dd/mm/yyyy"
+                  />
+              </div>
+
+              <div className="col-span-1 lg:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Chức danh</label>
                 <input
                   type="text"
@@ -519,9 +615,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   placeholder="VD: Trưởng ban..."
                 />
               </div>
+
+               <div className="col-span-1">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Ngày ký HĐ</label>
+                  <input
+                    type="text"
+                    value={newContractDate}
+                    onChange={e => setNewContractDate(e.target.value)}
+                    className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="dd/mm/yyyy"
+                  />
+              </div>
+
+               <div className="col-span-1 lg:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Loại HĐ/Ghi chú</label>
+                  <input
+                    type="text"
+                    value={newContractType}
+                    onChange={e => setNewContractType(e.target.value)}
+                    className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="VD: 1 năm, Thử việc..."
+                  />
+              </div>
+
               <button
                 type="submit"
-                className="w-full md:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center justify-center gap-1 shadow-sm h-[38px]"
+                className="col-span-1 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center justify-center gap-1 shadow-sm h-[38px]"
               >
                 <Plus className="w-4 h-4" />
                 Thêm
@@ -760,21 +879,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <table className="w-full text-sm text-left">
                 <thead className="bg-gray-100 border-b border-gray-200">
                 <tr>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-16">STT</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-1/4">Phòng/Ban</th>
-                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-1/3">Họ và tên</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-12">STT</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-1/5">Phòng/Ban</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-1/5">Họ và tên</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-24">Ngày sinh</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider">Chức danh</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-24">Ngày ký HĐ</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider w-24">Ghi chú</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-600 uppercase tracking-wider text-center w-24">Thao tác</th>
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                 {departments.map((dept, index) => {
-                    const deptEmps = employees.filter(e => e.department === dept);
+                    // Sắp xếp nhân viên theo chức vụ
+                    const deptEmps = employees
+                        .filter(e => e.department === dept)
+                        .sort((a, b) => getJobRank(b.jobTitle) - getJobRank(a.jobTitle));
+
                     if (deptEmps.length === 0) return null;
                     return (
                         <React.Fragment key={dept}>
                         <tr className="bg-gray-50">
-                            <td colSpan={5} className="px-4 py-2 text-xs font-bold text-blue-800 bg-blue-50/50">
+                            <td colSpan={8} className="px-4 py-2 text-xs font-bold text-blue-800 bg-blue-50/50">
                                 {toRoman(index + 1)}. {dept.toUpperCase()}
                             </td>
                         </tr>
@@ -782,7 +908,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-4 py-3 text-gray-500 font-medium text-center">{idx + 1}</td>
                             <td className="px-4 py-3 text-gray-700">{emp.department}</td>
-                            <td className="px-4 py-3 text-gray-900 font-medium">{emp.name}</td>
+                            <td className="px-4 py-3 text-gray-900 font-medium">
+                                <div className="flex items-center gap-3">
+                                    <img 
+                                        src={emp.avatar} 
+                                        alt="" 
+                                        className="w-8 h-8 rounded-full object-cover border border-gray-200 bg-gray-50"
+                                    />
+                                    <span>{emp.name}</span>
+                                </div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{emp.dob}</td>
                             <td className="px-4 py-3">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
                                 emp.role === Role.BOD ? 'bg-purple-50 text-purple-700 border-purple-100' :
@@ -792,6 +928,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 {emp.jobTitle || emp.role}
                                 </span>
                             </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{emp.contractDate}</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{emp.contractType}</td>
                             <td className="px-4 py-3 text-center">
                                 <div className="flex items-center justify-center gap-2">
                                     <button 
@@ -822,7 +960,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {editingEmp && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl animate-in zoom-in-95 duration-200">
                   <div className="flex justify-between items-center p-4 border-b border-gray-100">
                       <h3 className="font-bold text-gray-800 flex items-center gap-2">
                           <Edit className="w-5 h-5 text-blue-600" />
@@ -832,7 +970,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <X className="w-5 h-5" />
                       </button>
                   </div>
-                  <form onSubmit={handleUpdateSubmit} className="p-6 space-y-4">
+                  <form onSubmit={handleUpdateSubmit} className="p-6 grid grid-cols-2 gap-4">
+                      {/* Avatar Edit */}
+                      <div className="col-span-2 flex justify-center mb-2">
+                          <div className="w-20 h-20 rounded-full border-2 border-blue-200 bg-white flex items-center justify-center overflow-hidden relative group">
+                              {editAvatar ? (
+                                  <img src={editAvatar} alt="Preview" className="w-full h-full object-cover" />
+                              ) : (
+                                  <ImageIcon className="w-8 h-8 text-gray-400" />
+                              )}
+                              <label className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                                  <Camera className="w-6 h-6 text-white" />
+                                  <input type="file" accept="image/*" onChange={(e) => handleAvatarChange(e, setEditAvatar)} className="hidden" />
+                              </label>
+                          </div>
+                      </div>
+
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Họ và Tên</label>
                           <input type="text" required value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -850,11 +1003,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <button type="button" onClick={() => setEditIsNewDept(!editIsNewDept)} className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs rounded text-gray-600 whitespace-nowrap">{editIsNewDept ? 'Chọn' : '+Mới'}</button>
                           </div>
                       </div>
+                       <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Ngày sinh</label>
+                          <input type="text" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="dd/mm/yyyy" />
+                      </div>
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Chức danh hiển thị</label>
                           <input type="text" value={editJobTitle} onChange={(e) => setEditJobTitle(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="VD: Trưởng ban..." />
                       </div>
                       <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Ngày ký HĐ</label>
+                          <input type="text" value={editContractDate} onChange={(e) => setEditContractDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="dd/mm/yyyy" />
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Loại HĐ/Ghi chú</label>
+                          <input type="text" value={editContractType} onChange={(e) => setEditContractType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="VD: 1 năm, Thử việc..." />
+                      </div>
+                      <div className="col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Phân quyền Hệ thống</label>
                           <select value={editRole} onChange={(e) => setEditRole(e.target.value as Role)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
                               <option value={Role.STAFF}>Nhân viên</option>
@@ -862,7 +1027,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <option value={Role.BOD}>Ban TGĐ</option>
                           </select>
                       </div>
-                      <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                      <div className="col-span-2 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
                           <button type="button" onClick={() => setEditingEmp(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Hủy</button>
                           <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">Lưu thay đổi</button>
                       </div>

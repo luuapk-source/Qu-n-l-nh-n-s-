@@ -135,9 +135,10 @@ export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onC
               onChange={(e) => setType(e.target.value as LeaveType)}
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             >
-              {Object.values(LeaveType).map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+              <option value={LeaveType.VACATION}>Nghỉ phép năm (P)</option>
+              <option value={LeaveType.SICK}>Nghỉ ốm (O)</option>
+              <option value={LeaveType.PERSONAL}>Việc riêng (P)</option>
+              <option value={LeaveType.UNPAID}>Nghỉ không lương (KL)</option>
             </select>
           </div>
 
@@ -157,7 +158,7 @@ export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onC
             <textarea
               required
               rows={4}
-              placeholder="Nhập lý do ngắn gọn (ví dụ: bị cảm, đi du lịch...)"
+              placeholder="Nhập lý do cụ thể (ví dụ: bị sốt, nhà có việc bận, đi du lịch...)"
               className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
