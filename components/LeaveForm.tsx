@@ -1,31 +1,73 @@
-import React, { useState } from 'react';
-import { Employee, LeaveType } from '../types';
+
+import React, { useState, useEffect } from 'react';
+import { Employee, LeaveType, PublicHoliday } from '../types';
 import { polishLeaveReason } from '../services/geminiService';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Info } from 'lucide-react';
 
 interface LeaveFormProps {
   currentUser: Employee;
   onSubmit: (data: any) => void;
   onClose: () => void;
+  holidays: PublicHoliday[];
 }
 
-export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onClose }) => {
+export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onClose, holidays }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [type, setType] = useState<LeaveType>(LeaveType.VACATION);
   const [reason, setReason] = useState('');
   const [isPolishing, setIsPolishing] = useState(false);
+  const [daysCount, setDaysCount] = useState(0);
 
-  const calculateDays = () => {
-    if (!startDate || !endDate) return 0;
+  // Helper to format date YYYY-MM-DD
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  // Logic tính toán số ngày nghỉ
+  useEffect(() => {
+    if (!startDate || !endDate) {
+        setDaysCount(0);
+        return;
+    }
+    
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
-    return diffDays > 0 ? diffDays : 0;
-  };
+    
+    if (end < start) {
+        setDaysCount(0);
+        return;
+    }
 
-  const daysCount = calculateDays();
+    let total = 0;
+    let current = new Date(start);
+
+    while (current <= end) {
+        const dateStr = formatDate(current);
+        const dayOfWeek = current.getDay(); // 0 = Sun, 6 = Sat
+
+        // 1. Kiểm tra ngày lễ -> Tính 0
+        const isHoliday = holidays.some(h => h.date === dateStr);
+        
+        if (isHoliday) {
+            total += 0;
+        } 
+        // 2. Kiểm tra Chủ Nhật -> Tính 0
+        else if (dayOfWeek === 0) {
+            total += 0;
+        }
+        // 3. Kiểm tra Thứ 7 -> Tính 0.5 (Chỉ làm sáng)
+        else if (dayOfWeek === 6) {
+            total += 0.5;
+        }
+        // 4. Các ngày thường (T2-T6) -> Tính 1
+        else {
+            total += 1;
+        }
+
+        current.setDate(current.getDate() + 1);
+    }
+    
+    setDaysCount(total);
+  }, [startDate, endDate, holidays]);
 
   const handleAiPolish = async () => {
     if (!reason.trim()) return;
@@ -38,7 +80,7 @@ export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onC
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (daysCount <= 0) {
-      alert("Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.");
+      alert("Thời gian nghỉ không hợp lệ hoặc trùng vào ngày lễ/Chủ nhật hoàn toàn.");
       return;
     }
     onSubmit({
@@ -120,9 +162,18 @@ export const LeaveForm: React.FC<LeaveFormProps> = ({ currentUser, onSubmit, onC
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
-            {daysCount > 0 && (
-              <p className="text-sm text-gray-500 mt-1 text-right">Tổng cộng: <span className="font-bold text-gray-900">{daysCount} ngày</span></p>
-            )}
+            
+            <div className="mt-2 bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                    <p className="font-semibold text-gray-800">
+                        Tổng cộng: <span className="text-blue-700">{daysCount} ngày</span>
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        (Thứ 7 tính 0.5 ngày; Chủ nhật và Lễ không tính vào phép)
+                    </p>
+                </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 mt-6">

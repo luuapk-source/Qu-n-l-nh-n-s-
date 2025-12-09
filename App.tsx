@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { MOCK_EMPLOYEES, INITIAL_REQUESTS, MOCK_DEPARTMENTS, DEFAULT_COMPANY_INFO } from './constants';
-import { Employee, LeaveRequest, LeaveStatus, Role } from './types';
+import { MOCK_EMPLOYEES, INITIAL_REQUESTS, MOCK_DEPARTMENTS, DEFAULT_COMPANY_INFO, DEFAULT_HOLIDAYS, APP_VERSION } from './constants';
+import { Employee, LeaveRequest, LeaveStatus, Role, PublicHoliday } from './types';
 import { LeaveForm } from './components/LeaveForm';
 import { MonthlyReport } from './components/MonthlyReport';
 import { AdminPanel } from './components/AdminPanel';
@@ -16,7 +16,9 @@ import {
   XCircle, 
   Building,
   ShieldCheck,
-  Trash2
+  Trash2,
+  Info,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -24,6 +26,8 @@ const App: React.FC = () => {
   const [departments, setDepartments] = useState<string[]>(MOCK_DEPARTMENTS);
   const [currentUser, setCurrentUser] = useState<Employee>(MOCK_EMPLOYEES[0]);
   const [requests, setRequests] = useState<LeaveRequest[]>(INITIAL_REQUESTS);
+  const [holidays, setHolidays] = useState<PublicHoliday[]>(DEFAULT_HOLIDAYS);
+  
   const [view, setView] = useState<'dashboard' | 'report' | 'admin'>('dashboard');
   const [showForm, setShowForm] = useState(false);
   const [filterDept, setFilterDept] = useState<string>('ALL');
@@ -42,6 +46,9 @@ const App: React.FC = () => {
 
     const savedDepts = localStorage.getItem('departments');
     if (savedDepts) setDepartments(JSON.parse(savedDepts));
+
+    const savedHolidays = localStorage.getItem('holidays');
+    if (savedHolidays) setHolidays(JSON.parse(savedHolidays));
 
     const savedCompany = localStorage.getItem('company_info');
     if (savedCompany) {
@@ -62,6 +69,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('departments', JSON.stringify(departments));
   }, [departments]);
+
+  useEffect(() => {
+    localStorage.setItem('holidays', JSON.stringify(holidays));
+  }, [holidays]);
 
   useEffect(() => {
       localStorage.setItem('company_info', JSON.stringify({ name: companyName, logo: companyLogo }));
@@ -90,7 +101,6 @@ const App: React.FC = () => {
   };
 
   const handleDeleteRequest = (id: string) => {
-      // Không dùng window.confirm để tránh bị chặn, xóa trực tiếp
       setRequests(prev => prev.filter(req => req.id !== id));
   };
 
@@ -104,18 +114,13 @@ const App: React.FC = () => {
 
   const handleImportCSV = (newEmps: Employee[], newDepts: string[], mode: 'replace' | 'append') => {
     if (mode === 'replace') {
-      // Thay thế hoàn toàn: Dùng danh sách phòng ban mới để đảm bảo thứ tự (Ordered List)
       setDepartments(newDepts);
       setEmployees(newEmps);
     } else {
-      // Bổ sung:
-      // 1. Cập nhật phòng ban (chỉ thêm những phòng chưa có)
       setDepartments(prevDepts => {
           const combined = new Set([...prevDepts, ...newDepts]);
           return Array.from(combined);
       });
-
-      // 2. Cập nhật nhân viên (chống trùng lặp theo Name + Dept)
       setEmployees(prev => {
         const uniqueNewEmps = newEmps.filter(newE => 
            !prev.some(existing => 
@@ -129,11 +134,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteEmployee = (id: string) => {
-    console.log("Attempting to delete employee:", id);
-    // Force string comparison to handle legacy data issues
     setEmployees(prev => prev.filter(e => String(e.id) !== String(id)));
-    
-    // Cleanup if current user was deleted
     if (String(currentUser.id) === String(id)) {
         setTimeout(() => {
             const firstAvailable = employees.find(e => String(e.id) !== String(id));
@@ -148,75 +149,79 @@ const App: React.FC = () => {
     }
   };
 
+  // Holiday Handlers
+  const handleAddHoliday = (holiday: PublicHoliday) => {
+      setHolidays(prev => [...prev, holiday].sort((a,b) => a.date.localeCompare(b.date)));
+  };
+
+  const handleDeleteHoliday = (id: string) => {
+      setHolidays(prev => prev.filter(h => h.id !== id));
+  };
+
   const handleResetData = () => {
     localStorage.clear();
     setEmployees(MOCK_EMPLOYEES);
     setDepartments(MOCK_DEPARTMENTS);
     setRequests(INITIAL_REQUESTS);
+    setHolidays(DEFAULT_HOLIDAYS);
     setCompanyName(DEFAULT_COMPANY_INFO.name);
     setCompanyLogo(DEFAULT_COMPANY_INFO.logo);
     setCurrentUser(MOCK_EMPLOYEES[0]);
     alert("Đã khôi phục dữ liệu gốc thành công!");
   };
 
+  const handleRestoreSystem = (data: any) => {
+      try {
+          if (data.employees) setEmployees(data.employees);
+          if (data.departments) setDepartments(data.departments);
+          if (data.requests) setRequests(data.requests);
+          if (data.holidays) setHolidays(data.holidays);
+          if (data.companyInfo) {
+              setCompanyName(data.companyInfo.name);
+              setCompanyLogo(data.companyInfo.logo);
+          }
+          alert("Khôi phục dữ liệu thành công!");
+      } catch (error) {
+          alert("File dữ liệu không hợp lệ.");
+          console.error(error);
+      }
+  };
+
   // --- LOGIC PHÂN QUYỀN (Permission Logic) ---
-  
-  // Kiểm tra chức danh Trưởng Ban (Head)
   const isDeptHead = (jobTitle?: string) => {
       if (!jobTitle) return false;
       const t = jobTitle.toLowerCase();
-      // Phải là Trưởng Ban, không phải Phó
       return (t.includes('trưởng ban') || t.includes('kế toán trưởng') || t.includes('giám đốc ban')) && !t.includes('phó');
   };
 
-  // Kiểm tra chức danh Phó Ban (Deputy)
   const isDeptDeputy = (jobTitle?: string) => {
     if (!jobTitle) return false;
     const t = jobTitle.toLowerCase();
     return t.includes('phó ban') || t.includes('phó giám đốc ban');
   };
 
-  // Kiểm tra quyền thao tác (Duyệt hoặc Xóa)
   const hasPermissionOnRequest = (req: LeaveRequest, requester: Employee) => {
-    // 1. Rule: Nghỉ quá 3 ngày liên tục -> Chỉ Ban TGĐ (BOD) được duyệt/xóa
     if (req.daysCount > 3) {
         return currentUser.role === Role.BOD;
     }
-
-    // 2. Rule: Người xin nghỉ là Trưởng Ban -> Chỉ Ban TGĐ (BOD) được duyệt/xóa
     if (isDeptHead(requester.jobTitle)) {
         return currentUser.role === Role.BOD;
     }
-
-    // 3. Rule: Xử lý quyền duyệt trong cùng Ban (Trưởng/Phó)
     if (currentUser.department === requester.department && currentUser.id !== requester.id) {
-        
-        // 3a. Nếu current user là Trưởng Ban -> Được duyệt
         if (isDeptHead(currentUser.jobTitle)) {
             return true;
         }
-
-        // 3b. Nếu current user là Phó Ban
         if (isDeptDeputy(currentUser.jobTitle)) {
-            // Kiểm tra xem Ban này có Trưởng Ban nào không?
             const deptHasHead = employees.some(e => 
                 e.department === requester.department && isDeptHead(e.jobTitle)
             );
-
-            // Nếu KHÔNG CÓ Trưởng Ban -> Phó Ban được quyền duyệt (Thay quyền trưởng ban)
             if (!deptHasHead) {
                 return true;
             }
-            
-            // Nếu CÓ Trưởng Ban -> Phó Ban KHÔNG được duyệt (chỉ Trưởng Ban duyệt)
-            // (Trừ khi người xin nghỉ là cấp dưới trực tiếp được ủy quyền - nhưng ở đây làm đơn giản theo role)
             return false;
         }
     }
-
-    // Ban TGĐ luôn có quyền (fallback cho mọi trường hợp khác)
     if (currentUser.role === Role.BOD) return true;
-    
     return false;
   };
 
@@ -225,17 +230,11 @@ const App: React.FC = () => {
   const filteredRequests = requests.filter(req => {
     const requester = employees.find(e => e.id === req.employeeId);
     if (!requester) return false;
-
-    // Filter by Dept dropdown (Visual filter only)
     if (filterDept !== 'ALL' && requester.department !== filterDept) return false;
-
-    // Role-based visibility
-    if (currentUser.role === Role.BOD) return true; // BOD sees all
+    if (currentUser.role === Role.BOD) return true; 
     if (currentUser.role === Role.MANAGER) {
-        // Manager sees their own AND their department's requests
         return requester.department === currentUser.department;
     }
-    // Staff sees only their own
     return req.employeeId === currentUser.id;
   });
 
@@ -259,46 +258,48 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-gray-800">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col fixed h-full z-10">
-        <div className="p-6 border-b border-gray-100">
-          <h1 className="text-xl font-bold text-blue-600 flex items-center gap-3 overflow-hidden">
-            {companyLogo ? (
-                <img src={companyLogo} alt="Logo" className="w-8 h-8 object-contain" />
-            ) : (
-                <Calendar className="w-8 h-8 text-blue-600 flex-shrink0" />
-            )}
-            <span className="truncate" title={companyName}>{companyName}</span>
-          </h1>
-          <p className="text-xs text-gray-500 mt-2">Hệ thống quản lý nghỉ phép</p>
-        </div>
+      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col fixed h-full z-10 justify-between">
+        <div>
+            <div className="p-6 border-b border-gray-100">
+            <h1 className="text-xl font-bold text-blue-600 flex items-center gap-3 overflow-hidden">
+                {companyLogo ? (
+                    <img src={companyLogo} alt="Logo" className="w-8 h-8 object-contain" />
+                ) : (
+                    <Calendar className="w-8 h-8 text-blue-600 flex-shrink0" />
+                )}
+                <span className="truncate" title={companyName}>{companyName}</span>
+            </h1>
+            <p className="text-xs text-gray-500 mt-2">Hệ thống quản lý nghỉ phép</p>
+            </div>
 
-        <nav className="flex-1 p-4 space-y-2">
-          <button 
-            onClick={() => setView('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-          >
-            <Calendar className="w-5 h-5" />
-            Danh sách nghỉ phép
-          </button>
-          
-          <button 
-            onClick={() => setView('report')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'report' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
-          >
-            <BarChart3 className="w-5 h-5" />
-            Báo cáo tổng hợp
-          </button>
-
-          {canViewAdmin && (
+            <nav className="flex-1 p-4 space-y-2">
             <button 
-              onClick={() => setView('admin')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'admin' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => setView('dashboard')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'dashboard' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
             >
-              <Users className="w-5 h-5" />
-              Quản trị hệ thống
+                <Calendar className="w-5 h-5" />
+                Danh sách nghỉ phép
             </button>
-          )}
-        </nav>
+            
+            <button 
+                onClick={() => setView('report')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'report' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+                <FileSpreadsheet className="w-5 h-5" />
+                Bảng chấm công
+            </button>
+
+            {canViewAdmin && (
+                <button 
+                onClick={() => setView('admin')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${view === 'admin' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                >
+                <Users className="w-5 h-5" />
+                Quản trị hệ thống
+                </button>
+            )}
+            </nav>
+        </div>
 
         <div className="p-4 border-t border-gray-100 bg-gray-50">
           <div className="flex items-center gap-3 mb-3">
@@ -312,13 +313,12 @@ const App: React.FC = () => {
           </div>
           <div className="text-xs text-gray-400 mb-2">Chuyển đổi người dùng (Demo):</div>
           <select 
-            className="w-full text-xs p-2 border rounded bg-white outline-none"
+            className="w-full text-xs p-2 border rounded bg-white outline-none mb-2"
             value={currentUser.id}
             onChange={(e) => {
                 const user = employees.find(emp => String(emp.id) === String(e.target.value));
                 if (user) {
                     setCurrentUser(user);
-                    // Reset view if access lost
                     if (view === 'admin' && user.role === Role.STAFF) setView('dashboard');
                 }
             }}
@@ -327,6 +327,10 @@ const App: React.FC = () => {
               <option key={emp.id} value={emp.id}>{emp.name} ({emp.jobTitle || emp.role})</option>
             ))}
           </select>
+          <div className="flex items-center justify-between text-[10px] text-gray-400 pt-2 border-t border-gray-200">
+              <span className="flex items-center gap-1"><Info className="w-3 h-3"/> Version:</span>
+              <span className="font-mono bg-gray-200 px-1 rounded text-gray-600">{APP_VERSION}</span>
+          </div>
         </div>
       </aside>
 
@@ -352,12 +356,12 @@ const App: React.FC = () => {
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
               {view === 'dashboard' ? 'Theo dõi nghỉ phép' : 
-               view === 'report' ? 'Báo cáo chấm công' : 'Quản trị hệ thống'}
+               view === 'report' ? 'Bảng chấm công' : 'Quản trị hệ thống'}
             </h2>
             <p className="text-gray-500 text-sm mt-1">
               {view === 'dashboard' 
                 ? `Xin chào ${currentUser.name}, đây là danh sách đơn từ.`
-                : view === 'report' ? 'Thống kê số liệu nghỉ phép hàng tháng.'
+                : view === 'report' ? 'Quản lý công và xuất dữ liệu hàng tháng.'
                 : 'Thêm nhân viên mới, nhập danh sách hoặc cấu hình công ty.'}
             </p>
           </div>
@@ -408,12 +412,10 @@ const App: React.FC = () => {
                   const requester = employees.find(e => e.id === req.employeeId);
                   if (!requester) return null;
                   
-                  // Tính quyền cho từng đơn
                   const hasPerm = hasPermissionOnRequest(req, requester);
 
                   return (
                     <div key={req.id} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row gap-6 animate-in fade-in slide-in-from-bottom-2">
-                      {/* Left: User Info & Date */}
                       <div className="flex items-start gap-4 min-w-[200px]">
                         <img src={requester.avatar} alt="" className="w-12 h-12 rounded-full object-cover bg-gray-100" />
                         <div>
@@ -430,7 +432,6 @@ const App: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Middle: Reason */}
                       <div className="flex-1 pt-1 md:pt-0">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
@@ -445,14 +446,12 @@ const App: React.FC = () => {
                         </p>
                       </div>
 
-                      {/* Right: Actions/Status */}
                       <div className="flex flex-col items-end justify-between min-w-[140px] gap-4 md:gap-0">
                         <div className="flex flex-col items-end gap-1">
                             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(req.status)}`}>
                             {getStatusIcon(req.status)}
                             {req.status}
                             </div>
-                            {/* Hiển thị người duyệt */}
                             {req.status === LeaveStatus.APPROVED && req.approvedBy && (
                                 <span className="text-[10px] text-gray-500 text-right">
                                     Duyệt bởi: <strong>{req.approvedBy}</strong>
@@ -461,7 +460,6 @@ const App: React.FC = () => {
                         </div>
                         
                         <div className="flex gap-2 items-end">
-                            {/* Approval Actions: Chỉ hiện khi Chờ duyệt VÀ Có quyền */}
                             {req.status === LeaveStatus.PENDING && hasPerm && (
                             <>
                                 <button 
@@ -479,7 +477,6 @@ const App: React.FC = () => {
                             </>
                             )}
 
-                            {/* Delete Button: Hiện khi có quyền (Bất kể trạng thái), hoặc chính chủ tự xóa đơn của mình (khi chưa duyệt) */}
                             { (hasPerm || (req.employeeId === currentUser.id && req.status === LeaveStatus.PENDING)) && (
                                 <button 
                                     onClick={() => handleDeleteRequest(req.id)}
@@ -505,19 +502,26 @@ const App: React.FC = () => {
             requests={requests} 
             departments={departments}
             companyName={companyName}
+            holidays={holidays}
           />
         )}
 
         {view === 'admin' && canViewAdmin && (
           <AdminPanel 
+            currentUser={currentUser}
             employees={employees} 
             departments={departments}
+            holidays={holidays}
+            requests={requests}
             onAddEmployee={handleAddEmployee}
             onUpdateEmployee={handleUpdateEmployee}
             onImportCSV={handleImportCSV}
             onDeleteEmployee={handleDeleteEmployee}
             onAddDepartment={handleAddDepartment}
+            onAddHoliday={handleAddHoliday}
+            onDeleteHoliday={handleDeleteHoliday}
             onResetData={handleResetData}
+            onRestoreSystem={handleRestoreSystem}
             companyInfo={{ name: companyName, logo: companyLogo }}
             onUpdateCompanyInfo={(name, logo) => {
                 setCompanyName(name);
@@ -527,12 +531,12 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Modal */}
       {showForm && (
         <LeaveForm 
           currentUser={currentUser} 
           onSubmit={handleCreateRequest} 
           onClose={() => setShowForm(false)} 
+          holidays={holidays}
         />
       )}
     </div>

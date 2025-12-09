@@ -1,5 +1,7 @@
 
-import { Employee, Role, LeaveRequest, LeaveType, LeaveStatus } from './types';
+import { Employee, Role, LeaveRequest, LeaveType, LeaveStatus, PublicHoliday } from './types';
+
+export const APP_VERSION = '1.0.1 (Update 16/10)'; // Cập nhật số này mỗi khi thay đổi tính năng
 
 export const DEFAULT_COMPANY_INFO = {
   name: 'Công ty Cổ phần đầu tư đường cao tốc Nam Định - Thái Bình',
@@ -111,5 +113,13 @@ export const MOCK_EMPLOYEES: Employee[] = [
   createEmp('46', 'Nguyễn Văn Hoàng', 'BAN QUẢN LÝ DỰ ÁN 2', 'Chuyên viên Quản lý thi công'),
 ];
 
-// Danh sách yêu cầu nghỉ phép ban đầu để TRỐNG theo yêu cầu
 export const INITIAL_REQUESTS: LeaveRequest[] = [];
+
+// Ngày nghỉ lễ mặc định trong năm
+const currentYear = new Date().getFullYear();
+export const DEFAULT_HOLIDAYS: PublicHoliday[] = [
+    { id: 'h1', date: `${currentYear}-01-01`, name: 'Tết Dương Lịch' },
+    { id: 'h2', date: `${currentYear}-04-30`, name: 'Giải phóng miền Nam' },
+    { id: 'h3', date: `${currentYear}-05-01`, name: 'Quốc tế Lao động' },
+    { id: 'h4', date: `${currentYear}-09-02`, name: 'Quốc khánh' },
+];

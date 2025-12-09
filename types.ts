@@ -1,3 +1,4 @@
+
 export enum Role {
   BOD = 'Ban Tổng giám đốc', // Board of Directors (Quyền cao nhất)
   MANAGER = 'Quản lý',       // Trưởng/Phó ban (Duyệt đơn nhân viên)
@@ -36,6 +37,7 @@ export interface LeaveRequest {
   status: LeaveStatus;
   daysCount: number;
   createdAt: string;
+  approvedBy?: string; // Tên người duyệt đơn
 }
 
 export interface MonthlyStats {
@@ -44,4 +46,10 @@ export interface MonthlyStats {
   department: string;
   totalDays: number;
   leaveCount: number;
+}
+
+export interface PublicHoliday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
 }
