@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MOCK_EMPLOYEES, INITIAL_REQUESTS, MOCK_DEPARTMENTS, DEFAULT_COMPANY_INFO } from './constants';
 import { Employee, LeaveRequest, LeaveStatus, Role } from './types';
@@ -14,7 +15,8 @@ import {
   Clock, 
   XCircle,
   Building,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -74,9 +76,22 @@ const App: React.FC = () => {
   };
 
   const handleStatusChange = (id: string, newStatus: LeaveStatus) => {
-    setRequests(prev => prev.map(req => 
-      req.id === id ? { ...req, status: newStatus } : req
-    ));
+    setRequests(prev => prev.map(req => {
+      if (req.id === id) {
+        return {
+           ...req, 
+           status: newStatus,
+           // Nếu duyệt, lưu tên người duyệt. Nếu từ chối hoặc chuyển lại chờ duyệt, xóa người duyệt
+           approvedBy: newStatus === LeaveStatus.APPROVED ? currentUser.name : undefined 
+        };
+      }
+      return req;
+    }));
+  };
+
+  const handleDeleteRequest = (id: string) => {
+      // Không dùng window.confirm để tránh bị chặn, xóa trực tiếp
+      setRequests(prev => prev.filter(req => req.id !== id));
   };
 
   const handleAddEmployee = (emp: Employee) => {
@@ -144,19 +159,40 @@ const App: React.FC = () => {
     alert("Đã khôi phục dữ liệu gốc thành công!");
   };
 
-  // Permission Logic
-  const canApprove = (req: LeaveRequest, requester: Employee) => {
-    if (req.status !== LeaveStatus.PENDING) return false;
-    
-    // BOD can approve all
-    if (currentUser.role === Role.BOD) return true;
-    
-    // Manager can approve for their department (but not themselves if they request)
-    if (currentUser.role === Role.MANAGER && 
-        requester.department === currentUser.department && 
-        requester.id !== currentUser.id) {
-      return true;
+  // --- LOGIC PHÂN QUYỀN (Permission Logic) ---
+  
+  // Kiểm tra xem user có phải là Trưởng Ban (Head) không dựa trên chức danh
+  const isDeptHead = (jobTitle?: string) => {
+      if (!jobTitle) return false;
+      const t = jobTitle.toLowerCase();
+      return t.includes('trưởng ban') || t.includes('kế toán trưởng') || t.includes('giám đốc ban') || (t.includes('quản lý') && !t.includes('phó'));
+  };
+
+  // Kiểm tra quyền thao tác (Duyệt hoặc Xóa)
+  const hasPermissionOnRequest = (req: LeaveRequest, requester: Employee) => {
+    // 1. Rule: Nghỉ quá 3 ngày liên tục -> Chỉ Ban TGĐ (BOD) được duyệt/xóa
+    if (req.daysCount > 3) {
+        return currentUser.role === Role.BOD;
     }
+
+    // 2. Rule: Người xin nghỉ là Trưởng Ban -> Chỉ Ban TGĐ (BOD) được duyệt/xóa
+    if (isDeptHead(requester.jobTitle)) {
+        return currentUser.role === Role.BOD;
+    }
+
+    // 3. Rule: Người xin nghỉ là Phó Ban hoặc Nhân viên
+    // -> Trưởng Ban (của cùng Ban đó) duyệt
+    // -> HOẶC Ban TGĐ (quyền tối cao) cũng được duyệt
+    if (currentUser.role === Role.MANAGER) {
+        const isCurrentHead = isDeptHead(currentUser.jobTitle);
+        // Chỉ Trưởng Ban mới có quyền, Phó Ban (dù role MANAGER) cũng không được duyệt cho nhân viên
+        if (isCurrentHead && currentUser.department === requester.department && currentUser.id !== requester.id) {
+            return true;
+        }
+    }
+
+    // Ban TGĐ luôn có quyền (fallback)
+    if (currentUser.role === Role.BOD) return true;
     
     return false;
   };
@@ -348,6 +384,9 @@ const App: React.FC = () => {
                 filteredRequests.map(req => {
                   const requester = employees.find(e => e.id === req.employeeId);
                   if (!requester) return null;
+                  
+                  // Tính quyền cho từng đơn
+                  const hasPerm = hasPermissionOnRequest(req, requester);
 
                   return (
                     <div key={req.id} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row gap-6 animate-in fade-in slide-in-from-bottom-2">
@@ -384,29 +423,50 @@ const App: React.FC = () => {
                       </div>
 
                       {/* Right: Actions/Status */}
-                      <div className="flex flex-col items-end justify-between min-w-[120px] gap-4 md:gap-0">
-                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(req.status)}`}>
-                          {getStatusIcon(req.status)}
-                          {req.status}
+                      <div className="flex flex-col items-end justify-between min-w-[140px] gap-4 md:gap-0">
+                        <div className="flex flex-col items-end gap-1">
+                            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(req.status)}`}>
+                            {getStatusIcon(req.status)}
+                            {req.status}
+                            </div>
+                            {/* Hiển thị người duyệt */}
+                            {req.status === LeaveStatus.APPROVED && req.approvedBy && (
+                                <span className="text-[10px] text-gray-500 text-right">
+                                    Duyệt bởi: <strong>{req.approvedBy}</strong>
+                                </span>
+                            )}
                         </div>
                         
-                        {/* Approval Actions */}
-                        {canApprove(req, requester) && (
-                          <div className="flex gap-2">
-                             <button 
-                               onClick={() => handleStatusChange(req.id, LeaveStatus.REJECTED)}
-                               className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                             >
-                               Từ chối
-                             </button>
-                             <button 
-                               onClick={() => handleStatusChange(req.id, LeaveStatus.APPROVED)}
-                               className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
-                             >
-                               Duyệt
-                             </button>
-                          </div>
-                        )}
+                        <div className="flex gap-2 items-end">
+                            {/* Approval Actions: Chỉ hiện khi Chờ duyệt VÀ Có quyền */}
+                            {req.status === LeaveStatus.PENDING && hasPerm && (
+                            <>
+                                <button 
+                                onClick={() => handleStatusChange(req.id, LeaveStatus.REJECTED)}
+                                className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                                >
+                                Từ chối
+                                </button>
+                                <button 
+                                onClick={() => handleStatusChange(req.id, LeaveStatus.APPROVED)}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
+                                >
+                                Duyệt
+                                </button>
+                            </>
+                            )}
+
+                            {/* Delete Button: Hiện khi có quyền (Bất kể trạng thái), hoặc chính chủ tự xóa đơn của mình (khi chưa duyệt) */}
+                            { (hasPerm || (req.employeeId === currentUser.id && req.status === LeaveStatus.PENDING)) && (
+                                <button 
+                                    onClick={() => handleDeleteRequest(req.id)}
+                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Xóa đơn này"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                       </div>
                     </div>
                   );
