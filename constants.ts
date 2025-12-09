@@ -1,7 +1,8 @@
+
 import { Employee, Role, LeaveRequest, LeaveType, LeaveStatus } from './types';
 
 export const DEFAULT_COMPANY_INFO = {
-  name: 'CÔNG TY CỔ PHẦN',
+  name: 'Công ty Cổ phần đầu tư đường cao tốc Nam Định - Thái Bình',
   logo: ''
 };
 
@@ -110,33 +111,5 @@ export const MOCK_EMPLOYEES: Employee[] = [
   createEmp('46', 'Nguyễn Văn Hoàng', 'BAN QUẢN LÝ DỰ ÁN 2', 'Chuyên viên Quản lý thi công'),
 ];
 
-const today = new Date();
-const yesterday = new Date(today);
-yesterday.setDate(yesterday.getDate() - 1);
-const nextWeek = new Date(today);
-nextWeek.setDate(nextWeek.getDate() + 7);
-
-export const INITIAL_REQUESTS: LeaveRequest[] = [
-  {
-    id: 'req1',
-    employeeId: '7', // Lê Văn Trường
-    startDate: yesterday.toISOString().split('T')[0],
-    endDate: yesterday.toISOString().split('T')[0],
-    type: LeaveType.SICK,
-    reason: 'Tôi bị sốt cao và đau họng, cần nghỉ ngơi để hồi phục sức khỏe.',
-    status: LeaveStatus.APPROVED,
-    daysCount: 1,
-    createdAt: yesterday.toISOString()
-  },
-  {
-    id: 'req2',
-    employeeId: '10', // Vũ Thị Vi
-    startDate: nextWeek.toISOString().split('T')[0],
-    endDate: new Date(nextWeek.getTime() + 86400000 * 2).toISOString().split('T')[0],
-    type: LeaveType.VACATION,
-    reason: 'Tôi xin nghỉ phép năm để đi du lịch cùng gia đình, đã bàn giao công việc cho team.',
-    status: LeaveStatus.PENDING,
-    daysCount: 3,
-    createdAt: today.toISOString()
-  }
-];
+// Danh sách yêu cầu nghỉ phép ban đầu để TRỐNG theo yêu cầu
+export const INITIAL_REQUESTS: LeaveRequest[] = [];

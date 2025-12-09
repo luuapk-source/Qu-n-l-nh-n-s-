@@ -13,7 +13,7 @@ import {
   Search, 
   CheckCircle, 
   Clock, 
-  XCircle,
+  XCircle, 
   Building,
   ShieldCheck,
   Trash2
@@ -161,11 +161,19 @@ const App: React.FC = () => {
 
   // --- LOGIC PHÂN QUYỀN (Permission Logic) ---
   
-  // Kiểm tra xem user có phải là Trưởng Ban (Head) không dựa trên chức danh
+  // Kiểm tra chức danh Trưởng Ban (Head)
   const isDeptHead = (jobTitle?: string) => {
       if (!jobTitle) return false;
       const t = jobTitle.toLowerCase();
-      return t.includes('trưởng ban') || t.includes('kế toán trưởng') || t.includes('giám đốc ban') || (t.includes('quản lý') && !t.includes('phó'));
+      // Phải là Trưởng Ban, không phải Phó
+      return (t.includes('trưởng ban') || t.includes('kế toán trưởng') || t.includes('giám đốc ban')) && !t.includes('phó');
+  };
+
+  // Kiểm tra chức danh Phó Ban (Deputy)
+  const isDeptDeputy = (jobTitle?: string) => {
+    if (!jobTitle) return false;
+    const t = jobTitle.toLowerCase();
+    return t.includes('phó ban') || t.includes('phó giám đốc ban');
   };
 
   // Kiểm tra quyền thao tác (Duyệt hoặc Xóa)
@@ -180,18 +188,33 @@ const App: React.FC = () => {
         return currentUser.role === Role.BOD;
     }
 
-    // 3. Rule: Người xin nghỉ là Phó Ban hoặc Nhân viên
-    // -> Trưởng Ban (của cùng Ban đó) duyệt
-    // -> HOẶC Ban TGĐ (quyền tối cao) cũng được duyệt
-    if (currentUser.role === Role.MANAGER) {
-        const isCurrentHead = isDeptHead(currentUser.jobTitle);
-        // Chỉ Trưởng Ban mới có quyền, Phó Ban (dù role MANAGER) cũng không được duyệt cho nhân viên
-        if (isCurrentHead && currentUser.department === requester.department && currentUser.id !== requester.id) {
+    // 3. Rule: Xử lý quyền duyệt trong cùng Ban (Trưởng/Phó)
+    if (currentUser.department === requester.department && currentUser.id !== requester.id) {
+        
+        // 3a. Nếu current user là Trưởng Ban -> Được duyệt
+        if (isDeptHead(currentUser.jobTitle)) {
             return true;
+        }
+
+        // 3b. Nếu current user là Phó Ban
+        if (isDeptDeputy(currentUser.jobTitle)) {
+            // Kiểm tra xem Ban này có Trưởng Ban nào không?
+            const deptHasHead = employees.some(e => 
+                e.department === requester.department && isDeptHead(e.jobTitle)
+            );
+
+            // Nếu KHÔNG CÓ Trưởng Ban -> Phó Ban được quyền duyệt (Thay quyền trưởng ban)
+            if (!deptHasHead) {
+                return true;
+            }
+            
+            // Nếu CÓ Trưởng Ban -> Phó Ban KHÔNG được duyệt (chỉ Trưởng Ban duyệt)
+            // (Trừ khi người xin nghỉ là cấp dưới trực tiếp được ủy quyền - nhưng ở đây làm đơn giản theo role)
+            return false;
         }
     }
 
-    // Ban TGĐ luôn có quyền (fallback)
+    // Ban TGĐ luôn có quyền (fallback cho mọi trường hợp khác)
     if (currentUser.role === Role.BOD) return true;
     
     return false;
